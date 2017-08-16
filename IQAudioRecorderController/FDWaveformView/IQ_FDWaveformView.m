@@ -110,38 +110,40 @@
     self.assetTrack = [[self.asset tracksWithMediaType:AVMediaTypeAudio] firstObject];
 
     [self.asset loadValuesAsynchronouslyForKeys:@[@"duration"] completionHandler:^() {
-        self.loadingInProgress = NO;
-        if ([self.delegate respondsToSelector:@selector(waveformViewDidLoad:)])
-            [self.delegate waveformViewDidLoad:self];
-        
-        NSError *error = nil;
-        AVKeyValueStatus durationStatus = [self.asset statusOfValueForKey:@"duration" error:&error];
-        switch (durationStatus) {
-            case AVKeyValueStatusLoaded:{
-                self.image.image = nil;
-                self.highlightedImage.image = nil;
-                self.croppedImage.image = nil;
-                
-                NSArray *formatDesc = self.assetTrack.formatDescriptions;
-                CMAudioFormatDescriptionRef item = (__bridge CMAudioFormatDescriptionRef)formatDesc[0];
-                const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription(item);
-                unsigned long int samples = asbd->mSampleRate * (float)self.asset.duration.value/self.asset.duration.timescale;
-                self.totalSamples = self.zoomEndSamples = self.cropEndSamples = samples;
-                self.progressSamples = self.zoomStartSamples = self.cropStartSamples = 0;
-
-                [self setNeedsDisplay];
-                [self performSelectorOnMainThread:@selector(setNeedsLayout) withObject:nil waitUntilDone:NO];
-                break;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.loadingInProgress = NO;
+            if ([self.delegate respondsToSelector:@selector(waveformViewDidLoad:)])
+                [self.delegate waveformViewDidLoad:self];
+            
+            NSError *error = nil;
+            AVKeyValueStatus durationStatus = [self.asset statusOfValueForKey:@"duration" error:&error];
+            switch (durationStatus) {
+                case AVKeyValueStatusLoaded:{
+                    self.image.image = nil;
+                    self.highlightedImage.image = nil;
+                    self.croppedImage.image = nil;
+                    
+                    NSArray *formatDesc = self.assetTrack.formatDescriptions;
+                    CMAudioFormatDescriptionRef item = (__bridge CMAudioFormatDescriptionRef)formatDesc[0];
+                    const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription(item);
+                    unsigned long int samples = asbd->mSampleRate * (float)self.asset.duration.value/self.asset.duration.timescale;
+                    self.totalSamples = self.zoomEndSamples = self.cropEndSamples = samples;
+                    self.progressSamples = self.zoomStartSamples = self.cropStartSamples = 0;
+                    
+                    [self setNeedsDisplay];
+                    [self performSelectorOnMainThread:@selector(setNeedsLayout) withObject:nil waitUntilDone:NO];
+                    break;
+                }
+                case AVKeyValueStatusUnknown:
+                case AVKeyValueStatusLoading:
+                case AVKeyValueStatusFailed:
+                case AVKeyValueStatusCancelled:
+                    NSLog(@"IQ_FDWaveformView could not load asset: %@", error.localizedDescription);
+                    break;
+                default:
+                    break;
             }
-            case AVKeyValueStatusUnknown:
-            case AVKeyValueStatusLoading:
-            case AVKeyValueStatusFailed:
-            case AVKeyValueStatusCancelled:
-                NSLog(@"IQ_FDWaveformView could not load asset: %@", error.localizedDescription);
-                break;
-            default:
-                break;
-        }
+        });
     }];
 }
 
@@ -248,7 +250,9 @@
         needToRender = YES;
     if (needToRender) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-            [self renderAsset];
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                [self renderAsset]; // accesses frame and other properties which must be done on main thread
+            });
         });
         return;
     }
