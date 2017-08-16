@@ -127,6 +127,9 @@
         NSArray *constraints2 = [NSLayoutConstraint constraintsWithVisualFormat:@"V:|[slider]|" options:0 metrics:nil views:views];
         [self addConstraints:constraints2];
         
+        // minimum slider width
+        [self addConstraint: [NSLayoutConstraint constraintWithItem:_playerSlider attribute:NSLayoutAttributeWidth relatedBy:NSLayoutRelationGreaterThanOrEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:0 constant:250]];
+        
         [self addConstraint:[NSLayoutConstraint constraintWithItem:_playerSlider attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeCenterY multiplier:1 constant:0]];
     }
 }
