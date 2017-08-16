@@ -110,61 +110,40 @@
     self.assetTrack = [[self.asset tracksWithMediaType:AVMediaTypeAudio] firstObject];
 
     [self.asset loadValuesAsynchronouslyForKeys:@[@"duration"] completionHandler:^() {
-        self.loadingInProgress = NO;
-        if ([self.delegate respondsToSelector:@selector(waveformViewDidLoad:)])
-            [self.delegate waveformViewDidLoad:self];
-        
-        NSError *error = nil;
-        AVKeyValueStatus durationStatus = [self.asset statusOfValueForKey:@"duration" error:&error];
-        switch (durationStatus) {
-            case AVKeyValueStatusLoaded:{
-                
-                void (^threadSafeNilImage)(void) = ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.loadingInProgress = NO;
+            if ([self.delegate respondsToSelector:@selector(waveformViewDidLoad:)])
+                [self.delegate waveformViewDidLoad:self];
+            
+            NSError *error = nil;
+            AVKeyValueStatus durationStatus = [self.asset statusOfValueForKey:@"duration" error:&error];
+            switch (durationStatus) {
+                case AVKeyValueStatusLoaded:{
                     self.image.image = nil;
                     self.highlightedImage.image = nil;
                     self.croppedImage.image = nil;
-                };
-                
-                if ([NSThread isMainThread]) {
-                    threadSafeNilImage();
-                } else {
-                    dispatch_sync(dispatch_get_main_queue(), ^{
-                        threadSafeNilImage();
-                    });
-                }
-                
-                NSArray *formatDesc = self.assetTrack.formatDescriptions;
-                CMAudioFormatDescriptionRef item = (__bridge CMAudioFormatDescriptionRef)formatDesc[0];
-                const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription(item);
-                unsigned long int samples = asbd->mSampleRate * (float)self.asset.duration.value/self.asset.duration.timescale;
-                self.totalSamples = self.zoomEndSamples = self.cropEndSamples = samples;
-                self.progressSamples = self.zoomStartSamples = self.cropStartSamples = 0;
-
-                void (^threadSafeUpdate)(void) = ^{
+                    
+                    NSArray *formatDesc = self.assetTrack.formatDescriptions;
+                    CMAudioFormatDescriptionRef item = (__bridge CMAudioFormatDescriptionRef)formatDesc[0];
+                    const AudioStreamBasicDescription *asbd = CMAudioFormatDescriptionGetStreamBasicDescription(item);
+                    unsigned long int samples = asbd->mSampleRate * (float)self.asset.duration.value/self.asset.duration.timescale;
+                    self.totalSamples = self.zoomEndSamples = self.cropEndSamples = samples;
+                    self.progressSamples = self.zoomStartSamples = self.cropStartSamples = 0;
                     
                     [self setNeedsDisplay];
-                    [self setNeedsLayout];
-                };
-                
-                if ([NSThread isMainThread]) {
-                    threadSafeUpdate();
-                } else {
-                    dispatch_sync(dispatch_get_main_queue(), ^{
-                        threadSafeUpdate();
-                    });
+                    [self performSelectorOnMainThread:@selector(setNeedsLayout) withObject:nil waitUntilDone:NO];
+                    break;
                 }
-
-                break;
+                case AVKeyValueStatusUnknown:
+                case AVKeyValueStatusLoading:
+                case AVKeyValueStatusFailed:
+                case AVKeyValueStatusCancelled:
+                    NSLog(@"IQ_FDWaveformView could not load asset: %@", error.localizedDescription);
+                    break;
+                default:
+                    break;
             }
-            case AVKeyValueStatusUnknown:
-            case AVKeyValueStatusLoading:
-            case AVKeyValueStatusFailed:
-            case AVKeyValueStatusCancelled:
-                NSLog(@"IQ_FDWaveformView could not load asset: %@", error.localizedDescription);
-                break;
-            default:
-                break;
-        }
+        });
     }];
 }
 
@@ -174,22 +153,11 @@
     if (self.totalSamples) {
         float progress = (float)self.progressSamples / self.totalSamples;
         
-        void (^threadSafeUpdate)(void) = ^{
-            
-            CALayer *layer = [[CALayer alloc] init];
-            layer.frame = CGRectMake(0,0,self.frame.size.width*progress,self.frame.size.height);
-            layer.backgroundColor = [[UIColor blackColor] CGColor];
-            self.highlightedImage.layer.mask = layer;
-            [self setNeedsLayout];
-        };
-        
-        if ([NSThread isMainThread]) {
-            threadSafeUpdate();
-        } else {
-            dispatch_sync(dispatch_get_main_queue(), ^{
-                threadSafeUpdate();
-            });
-        }
+        CALayer *layer = [[CALayer alloc] init];
+        layer.frame = CGRectMake(0,0,self.frame.size.width*progress,self.frame.size.height);
+        layer.backgroundColor = [[UIColor blackColor] CGColor];
+        self.highlightedImage.layer.mask = layer;
+        [self setNeedsLayout];
     }
 }
 
@@ -201,29 +169,18 @@
         float startProgress = (float)self.cropStartSamples / self.totalSamples;
         float endProgress = (float)self.cropEndSamples / self.totalSamples;
 
-        void (^threadSafeUpdate)(void) = ^{
-            
-            CGRect visibleRect = CGRectMake(self.frame.size.width*startProgress,0,self.frame.size.width*(endProgress-startProgress),self.frame.size.height);;
-            UIBezierPath *bezierPath = [UIBezierPath bezierPathWithRect:self.croppedImage.bounds];
-            [bezierPath appendPath:[UIBezierPath bezierPathWithRect:visibleRect]];
-            
-            CAShapeLayer *layer = [[CAShapeLayer alloc] init];
-            layer.frame = self.croppedImage.bounds;
-            layer.fillRule = kCAFillRuleEvenOdd;
-            layer.fillColor = [UIColor blackColor].CGColor;
-            layer.path = bezierPath.CGPath;
-            
-            self.croppedImage.layer.mask = layer;
-            [self setNeedsLayout];
-        };
+        CGRect visibleRect = CGRectMake(self.frame.size.width*startProgress,0,self.frame.size.width*(endProgress-startProgress),self.frame.size.height);;
+        UIBezierPath *bezierPath = [UIBezierPath bezierPathWithRect:self.croppedImage.bounds];
+        [bezierPath appendPath:[UIBezierPath bezierPathWithRect:visibleRect]];
         
-        if ([NSThread isMainThread]) {
-            threadSafeUpdate();
-        } else {
-            dispatch_sync(dispatch_get_main_queue(), ^{
-                threadSafeUpdate();
-            });
-        }
+        CAShapeLayer *layer = [[CAShapeLayer alloc] init];
+        layer.frame = self.croppedImage.bounds;
+        layer.fillRule = kCAFillRuleEvenOdd;
+        layer.fillColor = [UIColor blackColor].CGColor;
+        layer.path = bezierPath.CGPath;
+
+        self.croppedImage.layer.mask = layer;
+        [self setNeedsLayout];
     }
 }
 
@@ -253,39 +210,15 @@
 - (void)setZoomStartSamples:(long)startSamples
 {
     _zoomStartSamples = startSamples;
-
-    void (^threadSafeUpdate)(void) = ^{
-        
-        [self setNeedsDisplay];
-        [self setNeedsLayout];
-    };
-    
-    if ([NSThread isMainThread]) {
-        threadSafeUpdate();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            threadSafeUpdate();
-        });
-    }
+    [self setNeedsDisplay];
+    [self setNeedsLayout];
 }
 
 - (void)setZoomEndSamples:(long)endSamples
 {
     _zoomEndSamples = endSamples;
-    
-    void (^threadSafeUpdate)(void) = ^{
-        
-        [self setNeedsDisplay];
-        [self setNeedsLayout];
-    };
-    
-    if ([NSThread isMainThread]) {
-        threadSafeUpdate();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            threadSafeUpdate();
-        });
-    }
+    [self setNeedsDisplay];
+    [self setNeedsLayout];
 }
 
 - (void)layoutSubviews
@@ -317,7 +250,9 @@
         needToRender = YES;
     if (needToRender) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-            [self renderAsset];
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                [self renderAsset]; // accesses frame and other properties which must be done on main thread
+            });
         });
         return;
     }
@@ -347,21 +282,8 @@
     unsigned long int renderStartSamples = minMaxX((long)self.zoomStartSamples - displayRange * horizontalTargetBleed, 0, self.totalSamples);
     unsigned long int renderEndSamples = minMaxX((long)self.zoomEndSamples + displayRange * horizontalTargetBleed, 0, self.totalSamples);
     
-    __block CGFloat widthInPixels = 0;
-    __block CGFloat heightInPixels = 0;
-    
-    if ([NSThread isMainThread])
-    {
-        widthInPixels = self.frame.size.width * [UIScreen mainScreen].scale * horizontalTargetOverdraw;
-        heightInPixels = self.frame.size.height * [UIScreen mainScreen].scale * verticalTargetOverdraw;
-    }
-    else
-    {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            widthInPixels = self.frame.size.width * [UIScreen mainScreen].scale * horizontalTargetOverdraw;
-            heightInPixels = self.frame.size.height * [UIScreen mainScreen].scale * verticalTargetOverdraw;
-        });
-    }
+    CGFloat widthInPixels = self.frame.size.width * [UIScreen mainScreen].scale * horizontalTargetOverdraw;
+    CGFloat heightInPixels = self.frame.size.height * [UIScreen mainScreen].scale * verticalTargetOverdraw;
     
     [IQ_FDWaveformView sliceAndDownsampleAsset:self.asset track:self.assetTrack startSamples:renderStartSamples endSamples:renderEndSamples targetSamples:widthInPixels done:^(NSData *samples, NSInteger sampleCount, Float32 sampleMax) {
         
