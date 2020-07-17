@@ -54,7 +54,7 @@
     {
         self.image = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, self.frame.size.width, self.frame.size.height)];
         self.image.contentMode = UIViewContentModeScaleToFill;
-        [self addSubview:self.image];
+//        [self addSubview:self.image];
     }
     
     {
@@ -154,11 +154,22 @@
         float progress = (float)self.progressSamples / self.totalSamples;
         
         CALayer *layer = [[CALayer alloc] init];
-        layer.frame = CGRectMake(0,0,self.frame.size.width*progress,self.frame.size.height);
+        layer.frame = CGRectMake(0,0,self.highlightedImage.frame.size.width*progress,self.highlightedImage.frame.size.height);
         layer.backgroundColor = [[UIColor blackColor] CGColor];
         self.highlightedImage.layer.mask = layer;
-        [self setNeedsLayout];
+//        [self setNeedsLayout];
     }
+}
+
+- (void)setProgressFloat:(float)progress
+{
+    CALayer *layer = [[CALayer alloc] init];
+    layer.frame = CGRectMake(0,0,self.highlightedImage.frame.size.width*progress,self.highlightedImage.frame.size.height);
+    NSLog(@"width: %f", self.highlightedImage.frame.size.width*progress);
+    layer.backgroundColor = [[UIColor blackColor] CGColor];
+    self.highlightedImage.layer.mask = layer;
+    self.highlightedImage.backgroundColor = [UIColor magentaColor];
+//    [self setNeedsLayout];
 }
 
 -(void)setCropStartSamples:(long)cropStartSamples
@@ -268,7 +279,9 @@
     }
     
     CGRect frame = CGRectMake(self.frame.size.width*scaledStart, 0, self.frame.size.width*scaledWidth, self.frame.size.height);
-    self.image.frame = self.highlightedImage.frame = self.croppedImage.frame = frame;
+    self.image.frame = frame;
+    self.highlightedImage.frame = frame;
+    self.croppedImage.frame = frame;
 }
 
 - (void)renderAsset

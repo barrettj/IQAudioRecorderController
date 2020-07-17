@@ -63,6 +63,8 @@
 /// Whether to allow the scroll gesture
 @property (nonatomic) BOOL doesAllowScroll;
 
+- (void)setProgressFloat:(float)progress;
+
 @end
 
 /// To receive progress updates from FDWaveformView

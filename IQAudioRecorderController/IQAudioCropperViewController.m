@@ -610,7 +610,7 @@ typedef NS_ENUM(NSUInteger, IQCropGestureState) {
 
 -(void)updatePlayProgress
 {
-    self.waveformView.progressSamples = self.waveformView.totalSamples*(_audioPlayer.currentTime/_audioPlayer.duration);
+    [self.waveformView setProgressFloat:_audioPlayer.currentTime/_audioPlayer.duration];
     
     if (_audioPlayer.currentTime >= rightCropView.cropTime)
     {
@@ -642,6 +642,7 @@ typedef NS_ENUM(NSUInteger, IQCropGestureState) {
     {
         [playProgressDisplayLink invalidate];
         playProgressDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(updatePlayProgress)];
+        playProgressDisplayLink.frameInterval = 5;
         [playProgressDisplayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     }
 }
@@ -761,8 +762,8 @@ typedef NS_ENUM(NSUInteger, IQCropGestureState) {
                 switch (exportSession.status)
                 {
                     case AVAssetExportSessionStatusCancelled:
-                    case AVAssetExportSessionStatusCompleted:
                     case AVAssetExportSessionStatusFailed:
+                    case AVAssetExportSessionStatusCompleted:
                     {
                         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
                             
@@ -788,6 +789,9 @@ typedef NS_ENUM(NSUInteger, IQCropGestureState) {
                                     leftCropView.cropTime = 0;
                                     rightCropView.cropTime = _audioPlayer.duration;
                                 }];
+                            }
+                            else {
+                                NSLog(@"The operation was cancelled or failed!!!");
                             }
                             
                             [_cropActivityIndicatorView stopAnimating];
@@ -820,6 +824,8 @@ typedef NS_ENUM(NSUInteger, IQCropGestureState) {
     invocation.target = _stopPlayButton.target;
     invocation.selector = _stopPlayButton.action;
     [invocation invoke];
+    
+    [playProgressDisplayLink invalidate];
 }
 
 #pragma mark - IQ_FDWaveformView delegate
